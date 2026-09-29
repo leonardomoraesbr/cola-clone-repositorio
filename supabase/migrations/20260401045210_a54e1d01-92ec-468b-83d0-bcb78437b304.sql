@@ -1,0 +1,1 @@
+ALTER TABLE public.tracked_links ADD COLUMN funnel_steps jsonb DEFAULT NULL;

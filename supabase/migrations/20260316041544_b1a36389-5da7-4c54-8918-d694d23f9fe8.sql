@@ -1,0 +1,1 @@
+ALTER TABLE public.bots ADD COLUMN initial_buttons jsonb DEFAULT '[]'::jsonb;

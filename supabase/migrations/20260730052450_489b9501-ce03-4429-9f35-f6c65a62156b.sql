@@ -1,0 +1,2 @@
+ALTER TABLE public.payment_orders ADD COLUMN IF NOT EXISTS last_checked_at timestamptz;
+CREATE INDEX IF NOT EXISTS payment_orders_pending_check_idx ON public.payment_orders (status, last_checked_at NULLS FIRST) WHERE status = 'pending';

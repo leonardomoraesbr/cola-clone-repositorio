@@ -1,0 +1,53 @@
+project_id = "gvtcqjcounhufbsrcnja"
+
+[functions.telegram-webhook]
+verify_jwt = false
+
+[functions.setup-webhook]
+verify_jwt = false
+
+[functions.create-payment]
+verify_jwt = false
+
+[functions.payment-webhook]
+verify_jwt = false
+
+[functions.process-downsell]
+verify_jwt = false
+
+[functions.send-mailing]
+verify_jwt = false
+
+[functions.send-channel-message]
+verify_jwt = false
+
+[functions.admin-broadcast]
+verify_jwt = false
+
+[functions.linkter-api]
+verify_jwt = false
+
+[functions.apply-scheduled-prices]
+verify_jwt = false
+
+[functions.bot-health-check]
+verify_jwt = false
+
+[functions.apply-price-rules]
+verify_jwt = false
+
+[functions.contingency-redirect]
+verify_jwt = false
+
+[functions.revant-webhook]
+verify_jwt = false
+
+[functions.check-pending-payments]
+verify_jwt = false
+
+
+[functions.sales-widget]
+verify_jwt = false
+
+[functions.custom-link-redirect]
+verify_jwt = false

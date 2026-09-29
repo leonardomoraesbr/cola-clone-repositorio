@@ -1,0 +1,1 @@
+ALTER TABLE public.demo_settings ADD COLUMN IF NOT EXISTS webhook_secret text;
