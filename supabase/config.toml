@@ -22,10 +22,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.admin-broadcast]
-verify_jwt = false
+verify_jwt = true
 
 [functions.linkter-api]
-verify_jwt = false
+verify_jwt = true
 
 [functions.apply-scheduled-prices]
 verify_jwt = false
@@ -51,3 +51,15 @@ verify_jwt = false
 
 [functions.custom-link-redirect]
 verify_jwt = false
+
+[functions.broadcast-status-email]
+verify_jwt = true
+
+[functions.notify-users-email]
+verify_jwt = true
+
+[functions.sync-revantpay-demo]
+verify_jwt = true
+
+[functions.validate-revant-key]
+verify_jwt = true
