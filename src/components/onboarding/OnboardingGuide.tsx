@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Rocket, ArrowRight, X, CheckCircle2, Circle, Loader2 } from "lucide-react";
 
 const DISMISS_KEY = "riot_onboarding_dismissed_v3";
@@ -27,9 +27,9 @@ export function OnboardingGuide({ compact = false }: { compact?: boolean }) {
         supabase.from("profiles").select("revantpay_api_key, revantpay_key_status").eq("id", user.id).maybeSingle(),
         supabase.from("bots").select("id, initial_message").eq("user_id", user.id),
       ]);
-      const p: any = profileRes.data;
-      const bots = botsRes.data || [];
-      const botIds = bots.map((b: any) => b.id);
+      const p = profileRes.data as { revantpay_api_key: string | null; revantpay_key_status: string | null } | null;
+      const bots = (botsRes.data || []) as Array<{ id: string; initial_message: string | null }>;
+      const botIds = bots.map((b) => b.id);
 
       let hasPlan = false;
       if (botIds.length) {
@@ -40,7 +40,7 @@ export function OnboardingGuide({ compact = false }: { compact?: boolean }) {
       setItems([
         { label: "Conectar a chave da Revant Pay", done: !!p?.revantpay_api_key && p?.revantpay_key_status !== "invalid" },
         { label: "Conectar seu bot do Telegram", done: bots.length > 0 },
-        { label: "Definir a mensagem de /start", done: bots.some((b: any) => !!b.initial_message) },
+        { label: "Definir a mensagem de /start", done: bots.some((b) => !!b.initial_message) },
         { label: "Cadastrar seus planos", done: hasPlan },
       ]);
     } finally {
@@ -48,7 +48,7 @@ export function OnboardingGuide({ compact = false }: { compact?: boolean }) {
     }
   }, [user]);
 
-  useEffect(() => { if (user) load(); }, [user?.id, load]);
+  useEffect(() => { if (user) load(); }, [user, load]);
 
   const doneCount = items.filter((i) => i.done).length;
   const complete = items.length > 0 && doneCount === items.length;
@@ -103,6 +103,7 @@ export function OnboardingGuide({ compact = false }: { compact?: boolean }) {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md p-0 overflow-hidden gap-0">
+          <DialogTitle className="sr-only">Falta pouco para você vender na Riot Vips</DialogTitle>
           <div className="p-6 bg-gradient-to-br from-primary/15 via-transparent to-transparent">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-teal-500 flex items-center justify-center mb-4">
               <Rocket className="w-6 h-6 text-primary-foreground" />
