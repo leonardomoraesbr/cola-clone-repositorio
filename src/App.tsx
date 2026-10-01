@@ -8,6 +8,7 @@ import { BotProvider } from "./contexts/BotContext";
 import Landing from "./pages/Landing";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import MyBots from "./pages/MyBots";
 import Webhooks from "./pages/Webhooks";
 import EditBot from "./pages/EditBot";
@@ -67,6 +68,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/auth" element={<Auth />} />
+      <Route path="/auth/reset-password" element={<ResetPassword />} />
       <Route path="/l/:slug" element={<LinkRedirect />} />
       <Route
         path="/configuracoes-iniciais"
