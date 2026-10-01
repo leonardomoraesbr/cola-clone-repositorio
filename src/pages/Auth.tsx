@@ -67,9 +67,11 @@ export default function Auth() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmationSentTo, setConfirmationSentTo] = useState("");
+  const [resendingConfirmation, setResendingConfirmation] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string; phone?: string; confirmPassword?: string }>({});
 
-  const { signIn, signUp, requestPasswordReset, user } = useAuth();
+  const { signIn, signUp, resendSignupConfirmation, requestPasswordReset, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -160,7 +162,7 @@ export default function Auth() {
       }
     } else {
       const fullPhone = `${country.dial} ${phone}`.trim();
-      const { error } = await signUp(email, password, fullName, fullPhone);
+      const { error, confirmationRequired } = await signUp(email, password, fullName, fullPhone);
       if (error) {
         if (error.message.includes("already registered")) {
           toast({
@@ -175,6 +177,12 @@ export default function Auth() {
             variant: "destructive",
           });
         }
+      } else if (confirmationRequired) {
+        setConfirmationSentTo(email);
+        toast({
+          title: "Confirme seu e-mail",
+          description: "Enviamos um link de confirmação. Depois de confirmar, você será direcionado para concluir a configuração da conta.",
+        });
       } else {
         localStorage.setItem("riot_new_signup", "1");
         toast({
@@ -185,6 +193,18 @@ export default function Auth() {
     }
 
     setIsLoading(false);
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!confirmationSentTo) return;
+    setResendingConfirmation(true);
+    const { error } = await resendSignupConfirmation(confirmationSentTo);
+    if (error) {
+      toast({ title: "Não foi possível reenviar", description: traduzErroAuth(error.message), variant: "destructive" });
+    } else {
+      toast({ title: "Novo link enviado", description: "Confira sua caixa de entrada e use o link mais recente." });
+    }
+    setResendingConfirmation(false);
   };
 
   return (
@@ -268,6 +288,24 @@ export default function Auth() {
           <p className="text-muted-foreground mb-8">
             {isForgotPassword ? "Informe o e-mail cadastrado para receber um link seguro de redefinição." : isLogin ? "Acesse seu painel e continue vendendo." : "Preencha seus dados e comece a vender."}
           </p>
+
+          {confirmationSentTo && (
+            <div role="status" className="mb-6 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm">
+              <p className="font-semibold">Falta confirmar seu cadastro</p>
+              <p className="mt-1 text-muted-foreground">
+                Enviamos uma mensagem para <span className="font-medium text-foreground">{confirmationSentTo}</span>.
+                Abra o link mais recente para confirmar o endereço e ativar sua conta. Se não encontrar, confira o Spam.
+              </p>
+              <button
+                type="button"
+                onClick={handleResendConfirmation}
+                disabled={resendingConfirmation}
+                className="mt-3 font-medium text-primary hover:underline disabled:opacity-60"
+              >
+                {resendingConfirmation ? "Reenviando…" : "Reenviar e-mail de confirmação"}
+              </button>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && !isForgotPassword && (

@@ -9,7 +9,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, phone: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, phone: string) => Promise<{ error: any; confirmationRequired: boolean }>;
+  resendSignupConfirmation: (email: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   requestPasswordReset: (email: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string, phone: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = new URL("/auth/confirm-email", window.location.origin).toString();
     
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -97,13 +98,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch((e) => console.warn("notify-new-signup failed", e));
     }
 
-    return { error };
+    return { error, confirmationRequired: !error && Boolean(data.user) && !data.session };
   };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
+    });
+    return { error };
+  };
+
+  const resendSignupConfirmation = async (email: string) => {
+    const emailRedirectTo = new URL("/auth/confirm-email", window.location.origin).toString();
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo },
     });
     return { error };
   };
@@ -119,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, requestPasswordReset, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, resendSignupConfirmation, signIn, requestPasswordReset, signOut }}>
       {children}
     </AuthContext.Provider>
   );
