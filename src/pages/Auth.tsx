@@ -26,6 +26,9 @@ function passwordScore(pw: string) {
 
 function traduzErroAuth(message: string) {
   const m = (message || "").toLowerCase();
+  if (m.includes("error sending confirmation email") || m.includes("error sending recovery email")) {
+    return "O serviço de e-mail do Supabase não conseguiu enviar a mensagem. O administrador precisa verificar o SMTP e os limites de envio.";
+  }
   if (m.includes("weak") || m.includes("easy to guess") || m.includes("pwned")) {
     return "Essa senha é muito comum e apareceu em vazamentos públicos. Crie uma senha única (misture letras, números e símbolos) — evite datas, nomes e sequências.";
   }
@@ -54,6 +57,7 @@ const COUNTRIES = [
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -65,7 +69,7 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string; phone?: string; confirmPassword?: string }>({});
 
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, requestPasswordReset, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -88,6 +92,11 @@ export default function Auth() {
       emailSchema.parse(email);
     } catch (e: any) {
       newErrors.email = e.errors[0].message;
+    }
+
+    if (isForgotPassword) {
+      setErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
     }
 
     try {
@@ -121,6 +130,17 @@ export default function Auth() {
     if (!validate()) return;
 
     setIsLoading(true);
+
+    if (isForgotPassword) {
+      const { error } = await requestPasswordReset(email);
+      if (error) {
+        toast({ title: "Não foi possível enviar o e-mail", description: traduzErroAuth(error.message), variant: "destructive" });
+      } else {
+        toast({ title: "Verifique sua caixa de entrada", description: "Se houver uma conta para esse e-mail, enviaremos as instruções de recuperação." });
+      }
+      setIsLoading(false);
+      return;
+    }
 
     if (isLogin) {
       const { error } = await signIn(email, password);
@@ -241,10 +261,10 @@ export default function Auth() {
           </div>
 
           <h1 className="text-3xl font-bold mb-2">
-            {isLogin ? "Entre na sua conta" : "Crie sua conta"}
+            {isForgotPassword ? "Recuperar senha" : isLogin ? "Entre na sua conta" : "Crie sua conta"}
           </h1>
           <p className="text-muted-foreground mb-8">
-            {isLogin ? "Acesse seu painel e continue vendendo." : "Preencha seus dados e comece a vender."}
+            {isForgotPassword ? "Informe seu e-mail e enviaremos as instruções para redefinir a senha." : isLogin ? "Acesse seu painel e continue vendendo." : "Preencha seus dados e comece a vender."}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -341,7 +361,7 @@ export default function Auth() {
               </div>
             )}
 
-            <div>
+            {!isForgotPassword && <div>
               <label className="block text-sm font-medium mb-2">Senha</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -378,7 +398,15 @@ export default function Auth() {
                   </p>
                 </div>
               )}
-            </div>
+            </div>}
+
+            {isLogin && !isForgotPassword && (
+              <div className="-mt-2 text-right">
+                <button type="button" onClick={() => setIsForgotPassword(true)} className="text-sm text-primary hover:underline">
+                  Esqueci minha senha
+                </button>
+              </div>
+            )}
 
             {!isLogin && (
               <div>
@@ -404,17 +432,24 @@ export default function Auth() {
               disabled={isLoading}
               className="w-full btn-gradient border-0 h-12 text-base"
             >
-              {isLoading ? "Carregando..." : isLogin ? "Entrar" : "Criar conta"}
+              {isLoading ? "Carregando..." : isForgotPassword ? "Enviar link de recuperação" : isLogin ? "Entrar" : "Criar conta"}
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
+          {isForgotPassword ? (
+            <div className="mt-6 text-center">
+              <button type="button" onClick={() => { setIsForgotPassword(false); setErrors({}); }} className="text-primary hover:underline font-medium">
+                Voltar para o login
+              </button>
+            </div>
+          ) : <div className="mt-6 text-center">
             <p className="text-muted-foreground">
               {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}{" "}
               <button
                 type="button"
                 onClick={() => {
                   setIsLogin(!isLogin);
+                  setIsForgotPassword(false);
                   setErrors({});
                 }}
                 className="text-primary hover:underline font-medium"
@@ -422,7 +457,7 @@ export default function Auth() {
                 {isLogin ? "Criar conta" : "Faça login"}
               </button>
             </p>
-          </div>
+          </div>}
         </div>
       </div>
     </div>
