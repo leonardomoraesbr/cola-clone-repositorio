@@ -39,15 +39,34 @@ const brl = (v: number) =>
 
 const SEEN_KEY = "notifications_last_seen";
 
+function readLastSeen(): number {
+  try {
+    const raw = Number(window.localStorage.getItem(SEEN_KEY) || 0);
+    return Number.isFinite(raw) ? raw : 0;
+  } catch {
+    // Some mobile browsers or privacy modes can deny storage access. Notifications
+    // should remain usable even when read state cannot be persisted.
+    return 0;
+  }
+}
+
+function formatNotificationTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return "Data indisponível";
+
+  try {
+    return formatDistanceToNow(date, { addSuffix: true, locale: ptBR });
+  } catch {
+    return "Data indisponível";
+  }
+}
+
 export function NotificationsDropdown() {
   const { bots } = useBots();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"all" | "sales" | "alerts">("all");
-  const [lastSeen, setLastSeen] = useState<number>(() => {
-    const raw = Number(localStorage.getItem(SEEN_KEY) || 0);
-    return Number.isFinite(raw) ? raw : 0;
-  });
+  const [lastSeen, setLastSeen] = useState<number>(readLastSeen);
 
   const botIds = useMemo(() => bots.map((b) => b.id).sort(), [bots]);
   const stableBotKey = botIds.join(",");
@@ -178,7 +197,11 @@ export function NotificationsDropdown() {
 
   const markAllRead = () => {
     const now = Date.now();
-    localStorage.setItem(SEEN_KEY, String(now));
+    try {
+      window.localStorage.setItem(SEEN_KEY, String(now));
+    } catch {
+      // Keep the current session usable even if the browser blocks storage.
+    }
     setLastSeen(now);
   };
 
@@ -279,9 +302,7 @@ export function NotificationsDropdown() {
                         <span className="text-[11px] text-muted-foreground truncate">@{n.botName}</span>
                         <span className="text-[11px] text-muted-foreground">·</span>
                         <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                          {n.timestamp
-                            ? formatDistanceToNow(new Date(n.timestamp), { addSuffix: true, locale: ptBR })
-                            : ""}
+                          {n.timestamp ? formatNotificationTime(n.timestamp) : ""}
                         </span>
                       </div>
                     </div>
