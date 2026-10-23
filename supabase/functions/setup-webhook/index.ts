@@ -120,6 +120,22 @@ serve(async (req) => {
     if (botError) return json({ error: "Não foi possível carregar o bot." }, 500);
     if (!bot?.token) return json({ error: "Bot não encontrado nesta conta." }, 404);
 
+    const { data: tokenMatches, error: tokenMatchesError } = await admin
+      .from("bots")
+      .select("id")
+      .eq("token", bot.token)
+      .limit(2);
+    if (tokenMatchesError) return json({ error: "Não foi possível validar o cadastro do bot." }, 500);
+    if ((tokenMatches?.length || 0) > 1) {
+      return json({
+        ok: false,
+        conflict: true,
+        status_available: true,
+        webhook_active: false,
+        error: "Este token está cadastrado em mais de uma conta. Um único cadastro deve ser mantido para o bot.",
+      });
+    }
+
     const expectedUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/telegram-webhook?token=${bot.token}`;
     const telegramApi = `https://api.telegram.org/bot${bot.token}`;
 
@@ -130,38 +146,76 @@ serve(async (req) => {
         body: JSON.stringify({ drop_pending_updates: false }),
       });
       const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.ok) return json({ ok: false, error: "Telegram não aceitou a remoção do webhook." }, 502);
+      if (!response.ok || !result?.ok) return json({ ok: false, error: "Telegram não aceitou a remoção do webhook." });
       return json({ ok: true, webhook_active: false });
     }
 
-    if (action === "set") {
-      const response = await fetch(`${telegramApi}/setWebhook`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: expectedUrl, allowed_updates: ["message", "callback_query"] }),
-      });
-      const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.ok) {
-        return json({ ok: false, error: "Telegram não aceitou a configuração do webhook." }, 502);
+    const getWebhookInfo = async () => {
+      try {
+        const response = await fetch(`${telegramApi}/getWebhookInfo`, { signal: AbortSignal.timeout(8000) });
+        const result = await response.json().catch(() => null);
+        return response.ok && result?.ok
+          ? { available: true, result: result.result }
+          : { available: false, result: null };
+      } catch {
+        return { available: false, result: null };
       }
+    };
 
-      await fetch(`${telegramApi}/setMyCommands`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commands: COMMANDS }),
-      }).catch(() => null);
+    const existingInfo = await getWebhookInfo();
+    if (action === "status") {
+      if (!existingInfo.available) {
+        return json({ ok: true, status_available: false, webhook_active: null });
+      }
+      return json({
+        ok: true,
+        status_available: true,
+        webhook_active: existingInfo.result?.url === expectedUrl,
+        pending_update_count: existingInfo.result?.pending_update_count ?? 0,
+        last_error_date: existingInfo.result?.last_error_date ?? null,
+      });
     }
 
-    // Verify server-side; browser CORS errors must not falsely mark an active bot as inactive.
-    const infoResponse = await fetch(`${telegramApi}/getWebhookInfo`);
-    const info = await infoResponse.json().catch(() => null);
-    if (!infoResponse.ok || !info?.ok) {
-      return json({ ok: false, error: "Não foi possível confirmar o webhook com o Telegram." }, 502);
+    if (action === "set") {
+      if (existingInfo.result?.url !== expectedUrl) {
+        let response: Response;
+        let result: any;
+        try {
+          response = await fetch(`${telegramApi}/setWebhook`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: expectedUrl, allowed_updates: ["message", "callback_query"] }),
+            signal: AbortSignal.timeout(10000),
+          });
+          result = await response.json().catch(() => null);
+        } catch {
+          return json({ ok: false, status_available: false, webhook_active: null, error: "Não foi possível falar com o Telegram agora. Tente novamente." });
+        }
+        if (!response.ok || !result?.ok) {
+          const error = Number(result?.error_code || response.status) === 429
+            ? "O Telegram limitou temporariamente as configurações. Aguarde alguns minutos e tente novamente."
+            : "Telegram não aceitou a configuração do webhook. Confira se o token do bot continua válido.";
+          return json({ ok: false, status_available: true, webhook_active: false, error });
+        }
+
+        await fetch(`${telegramApi}/setMyCommands`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ commands: COMMANDS }),
+        }).catch(() => null);
+      }
+    }
+
+    // Verify server-side; an unavailable status is not the same as an inactive webhook.
+    const info = action === "set" ? await getWebhookInfo() : existingInfo;
+    if (!info.available) {
+      return json({ ok: false, status_available: false, webhook_active: null, error: "A configuração foi enviada, mas não foi possível confirmar o estado com o Telegram agora." });
     }
 
     const webhookActive = info.result?.url === expectedUrl;
     return json({
       ok: true,
+      status_available: true,
       webhook_active: webhookActive,
       pending_update_count: info.result?.pending_update_count ?? 0,
       last_error_date: info.result?.last_error_date ?? null,

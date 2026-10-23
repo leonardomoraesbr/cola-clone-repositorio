@@ -40,7 +40,8 @@ export default function EditBot() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSettingUpWebhook, setIsSettingUpWebhook] = useState(false);
-  const [webhookActive, setWebhookActive] = useState(false);
+  const [webhookActive, setWebhookActive] = useState<boolean | null>(null);
+  const [webhookProblem, setWebhookProblem] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
@@ -81,15 +82,27 @@ export default function EditBot() {
 
   const checkWebhookStatus = async () => {
     if (!selectedBot) return;
+    setWebhookActive(null);
+    setWebhookProblem(null);
     try {
       const { data, error } = await supabase.functions.invoke("setup-webhook", {
         body: { botId: selectedBot.id, action: "status" },
       });
       if (error) throw error;
-      setWebhookActive(data?.ok === true && data?.webhook_active === true);
+      if (data?.conflict) {
+        setWebhookActive(false);
+        setWebhookProblem(data.error || "O token do bot está vinculado a mais de uma conta.");
+      } else if (data?.status_available === false || data?.webhook_active === null) {
+        setWebhookActive(null);
+        setWebhookProblem("Não foi possível consultar o Telegram agora. Isso não significa que o bot foi desativado.");
+      } else {
+        setWebhookActive(data?.ok === true && data?.webhook_active === true);
+        setWebhookProblem(null);
+      }
     } catch (error) {
       console.error('Error checking webhook:', error);
-      setWebhookActive(false);
+      setWebhookActive(null);
+      setWebhookProblem("Não foi possível consultar o Telegram agora. Isso não significa que o bot foi desativado.");
     }
   };
 
@@ -125,20 +138,34 @@ export default function EditBot() {
 
       if (error) throw error;
 
+      if (data?.conflict) {
+        setWebhookActive(false);
+        setWebhookProblem(data.error || "O token do bot está vinculado a mais de uma conta.");
+        throw new Error(data.error || "Este bot está cadastrado em mais de uma conta.");
+      }
+
       if (data?.ok && data?.webhook_active) {
         setWebhookActive(true);
+        setWebhookProblem(null);
         toast({
           title: "Webhook ativado!",
           description: "Seu bot agora responde ao /start automaticamente.",
         });
       } else {
+        if (data?.status_available === false || data?.webhook_active === null) {
+          setWebhookActive(null);
+          setWebhookProblem(data?.error || "Não foi possível confirmar o estado com o Telegram agora.");
+        } else {
+          setWebhookActive(data?.webhook_active === true);
+          setWebhookProblem(data?.error || null);
+        }
         throw new Error(data?.error || 'O Telegram não confirmou o webhook ativo.');
       }
     } catch (error) {
       console.error("Error setting up webhook:", error);
       toast({
         title: "Erro ao ativar webhook",
-        description: "Tente novamente mais tarde.",
+        description: error instanceof Error ? error.message : "Tente novamente mais tarde.",
         variant: "destructive",
       });
     } finally {
@@ -478,11 +505,11 @@ export default function EditBot() {
           <StatCard
             icon={Zap}
             label="Status"
-            value={webhookActive ? "Ativo" : "Inativo"}
-            subValue={webhookActive ? "Respondendo" : "Configure o webhook"}
-            color={webhookActive ? "bg-green-500/20 text-green-500" : "bg-yellow-500/20 text-yellow-500"}
-            bar={webhookActive ? "bg-green-500" : "bg-yellow-500"}
-            progress={webhookActive ? 100 : 30}
+            value={webhookActive === null ? "Verificando" : webhookActive ? "Ativo" : "Inativo"}
+            subValue={webhookActive === null ? "Estado indisponível" : webhookActive ? "Webhook confirmado" : "Configure o webhook"}
+            color={webhookActive === null ? "bg-muted text-muted-foreground" : webhookActive ? "bg-green-500/20 text-green-500" : "bg-yellow-500/20 text-yellow-500"}
+            bar={webhookActive === null ? "bg-muted" : webhookActive ? "bg-green-500" : "bg-yellow-500"}
+            progress={webhookActive === null ? 0 : webhookActive ? 100 : 30}
           />
           <StatCard
             icon={Bot}
@@ -515,7 +542,7 @@ export default function EditBot() {
         <Panel
           icon={Zap}
           title="Status do Bot"
-          subtitle={webhookActive ? "Ativo" : "Verificação de webhook"}
+          subtitle={webhookActive === null ? "Estado indisponível" : webhookActive ? "Ativo" : "Verificação de webhook"}
           className="mb-6"
           action={
             <Button
@@ -543,7 +570,11 @@ export default function EditBot() {
           }
         >
           <p className="text-sm text-muted-foreground">
-            {webhookActive ? 'Bot ativo e respondendo mensagens.' : 'Webhook não configurado. Ative para que o bot responda ao /start automaticamente.'}
+            {webhookProblem || (webhookActive === null
+              ? 'Não foi possível consultar o Telegram. Recarregue o status antes de concluir que o bot está desativado.'
+              : webhookActive
+                ? 'Webhook do bot confirmado no Telegram.'
+                : 'Webhook não configurado. Ative para que o bot responda ao /start automaticamente.')}
           </p>
         </Panel>
 
