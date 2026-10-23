@@ -155,7 +155,9 @@ export default function InitialSetup() {
         .single();
       if (error) throw error;
 
-      await supabase.functions.invoke("setup-webhook", { body: { botId: newBot.id } }).catch(() => null);
+      const { data: webhook, error: webhookError } = await supabase.functions.invoke("setup-webhook", {
+        body: { botId: newBot.id, action: "set" },
+      });
       await applyDefaults(newBot.id);
       await refreshBots();
       setSelectedBot(newBot as any);
@@ -163,7 +165,13 @@ export default function InitialSetup() {
       setBotUsername(newBot.username);
       setToken("");
       setOpen(null);
-      toast({ title: "Bot conectado!", description: `@${newBot.username} já tem mensagem de /start e planos prontos.` });
+      toast({
+        title: webhookError || !webhook?.webhook_active ? "Bot conectado, falta ativar o webhook" : "Bot conectado!",
+        description: webhookError || !webhook?.webhook_active
+          ? "O cadastro foi salvo, mas o Telegram não confirmou o webhook. Abra Meus Bots e toque em Ativar Bot."
+          : `@${newBot.username} já tem mensagem de /start e planos prontos.`,
+        variant: webhookError || !webhook?.webhook_active ? "destructive" : "default",
+      });
     } catch (e: any) {
       toast({ title: "Erro ao conectar bot", description: e.message || "Tente novamente.", variant: "destructive" });
     } finally {

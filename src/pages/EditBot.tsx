@@ -82,11 +82,14 @@ export default function EditBot() {
   const checkWebhookStatus = async () => {
     if (!selectedBot) return;
     try {
-      const response = await fetch(`https://api.telegram.org/bot${selectedBot.token}/getWebhookInfo`);
-      const data = await response.json();
-      setWebhookActive(data.result?.url?.includes('telegram-webhook'));
+      const { data, error } = await supabase.functions.invoke("setup-webhook", {
+        body: { botId: selectedBot.id, action: "status" },
+      });
+      if (error) throw error;
+      setWebhookActive(data?.ok === true && data?.webhook_active === true);
     } catch (error) {
       console.error('Error checking webhook:', error);
+      setWebhookActive(false);
     }
   };
 
@@ -117,19 +120,19 @@ export default function EditBot() {
     setIsSettingUpWebhook(true);
     try {
       const { data, error } = await supabase.functions.invoke('setup-webhook', {
-        body: { botToken: selectedBot.token, action: 'set' }
+        body: { botId: selectedBot.id, action: 'set' }
       });
 
       if (error) throw error;
 
-      if (data.ok) {
+      if (data?.ok && data?.webhook_active) {
         setWebhookActive(true);
         toast({
           title: "Webhook ativado!",
           description: "Seu bot agora responde ao /start automaticamente.",
         });
       } else {
-        throw new Error(data.description || 'Failed to set webhook');
+        throw new Error(data?.error || 'O Telegram não confirmou o webhook ativo.');
       }
     } catch (error) {
       console.error("Error setting up webhook:", error);

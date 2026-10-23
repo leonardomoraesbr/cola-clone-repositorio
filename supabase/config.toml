@@ -70,7 +70,7 @@ content_path = "./templates/auth/factor_unenrolled.html"
 verify_jwt = false
 
 [functions.setup-webhook]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-payment]
 verify_jwt = false
