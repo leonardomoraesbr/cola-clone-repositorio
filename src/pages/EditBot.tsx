@@ -40,6 +40,7 @@ export default function EditBot() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSettingUpWebhook, setIsSettingUpWebhook] = useState(false);
+  const [isCheckingWebhook, setIsCheckingWebhook] = useState(false);
   const [webhookActive, setWebhookActive] = useState<boolean | null>(null);
   const [webhookProblem, setWebhookProblem] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -82,6 +83,7 @@ export default function EditBot() {
 
   const checkWebhookStatus = async () => {
     if (!selectedBot) return;
+    setIsCheckingWebhook(true);
     setWebhookActive(null);
     setWebhookProblem(null);
     try {
@@ -94,15 +96,26 @@ export default function EditBot() {
         setWebhookProblem(data.error || "O token do bot está vinculado a mais de uma conta.");
       } else if (data?.status_available === false || data?.webhook_active === null) {
         setWebhookActive(null);
-        setWebhookProblem("Não foi possível consultar o Telegram agora. Isso não significa que o bot foi desativado.");
+        const messages: Record<string, string> = {
+          telegram_token_rejected: "O Telegram rejeitou o token deste bot. Confira-o no BotFather antes de reativar.",
+          telegram_rate_limited: "O Telegram limitou consultas temporariamente. Aguarde um pouco e tente consultar novamente.",
+          telegram_timeout: "O Telegram demorou para responder. Isso não significa que o bot foi desativado; consulte novamente.",
+          telegram_network_error: "Não foi possível conectar ao Telegram agora. Isso não significa que o bot foi desativado; consulte novamente.",
+        };
+        setWebhookProblem(messages[data?.status_error_code] || "Não foi possível confirmar o status com o Telegram. Isso não significa que o bot foi desativado.");
       } else {
         setWebhookActive(data?.ok === true && data?.webhook_active === true);
-        setWebhookProblem(null);
+        const configuredElsewhere = data?.webhook_configured_elsewhere === true;
+        setWebhookProblem(configuredElsewhere
+          ? "O Telegram informou que este bot está apontado para outro webhook. Isso não é uma desativação automática; a ativação nesta plataforma substituirá o destino atual."
+          : null);
       }
     } catch (error) {
       console.error('Error checking webhook:', error);
       setWebhookActive(null);
       setWebhookProblem("Não foi possível consultar o Telegram agora. Isso não significa que o bot foi desativado.");
+    } finally {
+      setIsCheckingWebhook(false);
     }
   };
 
@@ -546,14 +559,14 @@ export default function EditBot() {
           className="mb-6"
           action={
             <Button
-              onClick={handleSetupWebhook}
-              disabled={isSettingUpWebhook}
+              onClick={webhookActive === null ? checkWebhookStatus : handleSetupWebhook}
+              disabled={isSettingUpWebhook || isCheckingWebhook}
               className={webhookActive ? "bg-green-600 hover:bg-green-700" : "btn-gradient"}
             >
-              {isSettingUpWebhook ? (
+              {isSettingUpWebhook || isCheckingWebhook ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Ativando...
+                  {isCheckingWebhook ? "Consultando..." : "Ativando..."}
                 </>
               ) : webhookActive ? (
                 <>
@@ -562,8 +575,8 @@ export default function EditBot() {
                 </>
               ) : (
                 <>
-                  <Zap className="w-4 h-4 mr-2" />
-                  Ativar Bot
+                  {webhookActive === null ? <Loader2 className="w-4 h-4 mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
+                  {webhookActive === null ? "Consultar status" : "Ativar Bot"}
                 </>
               )}
             </Button>

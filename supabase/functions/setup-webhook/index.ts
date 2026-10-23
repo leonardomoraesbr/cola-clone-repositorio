@@ -154,23 +154,32 @@ serve(async (req) => {
       try {
         const response = await fetch(`${telegramApi}/getWebhookInfo`, { signal: AbortSignal.timeout(8000) });
         const result = await response.json().catch(() => null);
-        return response.ok && result?.ok
-          ? { available: true, result: result.result }
-          : { available: false, result: null };
-      } catch {
-        return { available: false, result: null };
+        if (!response.ok) {
+          return { available: false, result: null, reason: response.status === 429 ? "telegram_rate_limited" : response.status === 401 ? "telegram_token_rejected" : `telegram_http_${response.status}` };
+        }
+        if (!result?.ok) {
+          const errorCode = Number(result?.error_code);
+          return { available: false, result: null, reason: errorCode === 429 ? "telegram_rate_limited" : errorCode === 401 ? "telegram_token_rejected" : "telegram_rejected_request" };
+        }
+        return { available: true, result: result.result, reason: null };
+      } catch (error) {
+        const reason = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+          ? "telegram_timeout"
+          : "telegram_network_error";
+        return { available: false, result: null, reason };
       }
     };
 
     const existingInfo = await getWebhookInfo();
     if (action === "status") {
       if (!existingInfo.available) {
-        return json({ ok: true, status_available: false, webhook_active: null });
+        return json({ ok: true, status_available: false, webhook_active: null, status_error_code: existingInfo.reason });
       }
       return json({
         ok: true,
         status_available: true,
         webhook_active: existingInfo.result?.url === expectedUrl,
+        webhook_configured_elsewhere: Boolean(existingInfo.result?.url && existingInfo.result.url !== expectedUrl),
         pending_update_count: existingInfo.result?.pending_update_count ?? 0,
         last_error_date: existingInfo.result?.last_error_date ?? null,
       });
@@ -209,7 +218,7 @@ serve(async (req) => {
     // Verify server-side; an unavailable status is not the same as an inactive webhook.
     const info = action === "set" ? await getWebhookInfo() : existingInfo;
     if (!info.available) {
-      return json({ ok: false, status_available: false, webhook_active: null, error: "A configuração foi enviada, mas não foi possível confirmar o estado com o Telegram agora." });
+      return json({ ok: false, status_available: false, webhook_active: null, status_error_code: info.reason, error: "A configuração foi enviada, mas não foi possível confirmar o estado com o Telegram agora." });
     }
 
     const webhookActive = info.result?.url === expectedUrl;
@@ -217,6 +226,7 @@ serve(async (req) => {
       ok: true,
       status_available: true,
       webhook_active: webhookActive,
+      webhook_configured_elsewhere: Boolean(info.result?.url && !webhookActive),
       pending_update_count: info.result?.pending_update_count ?? 0,
       last_error_date: info.result?.last_error_date ?? null,
     });
